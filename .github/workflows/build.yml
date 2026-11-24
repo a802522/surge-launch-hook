@@ -1,0 +1,39 @@
+name: build-dylib
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build arm64 iOS dylib
+        run: |
+          set -eux
+          xcrun --sdk iphoneos --show-sdk-path
+          mkdir -p dist
+          xcrun --sdk iphoneos clang \
+            -arch arm64 \
+            -miphoneos-version-min=14.0 \
+            -fobjc-arc -fblocks \
+            -dynamiclib \
+            -framework Foundation -framework UIKit -lobjc \
+            -o dist/SurgeLaunchHook.dylib SurgeLaunchHook.m
+          file dist/SurgeLaunchHook.dylib
+          otool -L dist/SurgeLaunchHook.dylib
+          otool -l dist/SurgeLaunchHook.dylib | grep -A3 LC_BUILD_VERSION || true
+
+      - name: Commit dylib back
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f dist/SurgeLaunchHook.dylib
+          git commit -m "build: SurgeLaunchHook.dylib" || true
+          git push
