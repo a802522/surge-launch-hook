@@ -10,27 +10,40 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Install clang + lld
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld git file
+
+      - name: Fetch iOS SDK
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/theos/sdks.git sdks
+          cd sdks
+          git sparse-checkout set iPhoneOS16.5.sdk
+          cd ..
+          ls sdks/iPhoneOS16.5.sdk | head
+
       - name: Build arm64 iOS dylib
         run: |
           set -eux
-          xcrun --sdk iphoneos --show-sdk-path
+          SDK="$PWD/sdks/iPhoneOS16.5.sdk"
           mkdir -p dist
-          xcrun --sdk iphoneos clang \
-            -arch arm64 \
-            -miphoneos-version-min=14.0 \
+          clang --version
+          clang -target arm64-apple-ios14.0 \
+            -isysroot "$SDK" \
             -fobjc-arc -fblocks \
             -dynamiclib \
             -framework Foundation -framework UIKit -lobjc \
+            -fuse-ld=lld \
             -o dist/SurgeLaunchHook.dylib SurgeLaunchHook.m
           file dist/SurgeLaunchHook.dylib
-          otool -L dist/SurgeLaunchHook.dylib
-          otool -l dist/SurgeLaunchHook.dylib | grep -A3 LC_BUILD_VERSION || true
+          llvm-objdump -p dist/SurgeLaunchHook.dylib | head -60 || true
 
       - uses: actions/upload-artifact@v4
         with:
